@@ -21,6 +21,7 @@ for portfolio in portfolios:
     portfolio_values[portfolio] = portfolio_value
 
 print(portfolio_values)
+print(portfolio_values)
 
 
 
