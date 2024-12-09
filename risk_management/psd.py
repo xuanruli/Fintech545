@@ -1,7 +1,6 @@
 import numpy as np
 import pandas as pd
-import time
-
+from sklearn.decomposition import PCA
 
 def cholesky_PSD(data):
     data = pd.DataFrame(data)
@@ -18,7 +17,6 @@ def cholesky_PSD(data):
     return matrix
 
 def higham_PSD(A, tol=1e-8, max_iter=100):
-    n = A.shape[0]
     Y = A.copy()
     delta_S = np.zeros_like(A)
     for k in range(max_iter):
@@ -37,7 +35,6 @@ def proj_psd(matrix):
     eigenvalues, eigenvectors = np.linalg.eigh(matrix)
     eigenvalues[eigenvalues < 0] = 0
     return eigenvectors @ np.diag(eigenvalues) @ eigenvectors.T
-
 
 def near_PSD(a, epsilon=0.0):
     n = a.shape[0]
@@ -62,35 +59,40 @@ def near_PSD(a, epsilon=0.0):
 
     return out
 
-n = 500
-sigma = np.full((n, n), 0.9)
-np.fill_diagonal(sigma, 1)
-sigma[0, 1] = 0.7357
-sigma[1, 0] = 0.7357
+def simulateNormal(N, cov, mean=None, seed=1234, fixmethod=None):
+    np.random.seed(seed)
+    n = cov.shape[0]
+    if cov.shape[0] != cov.shape[1]:
+        raise ValueError(f"Covariance matrix is not square ({n},{cov.shape[1]})")
+    if mean is None:
+        mean = np.zeros(n)
+    elif len(mean) != n:
+        raise ValueError(f"Mean ({len(mean)}) is not the size of cov ({n},{n})")
+    if fixmethod:
+        cov = fixmethod(cov)
+    L = np.linalg.cholesky(cov)
+    randn = np.random.randn(n, N)
+    samples = L @ randn + mean[:, np.newaxis]
+    return samples.T
 
+def find_n_component(cumulative_variance,percent):
+    n = 0
+    while percent > cumulative_variance[n]:
+        n +=1
+    return n
 
-start_time = time.time()
-matrix_near = near_PSD(sigma)
-end_time = time.time()
-runtime = end_time - start_time
-eigenvalues = np.linalg.eigvals(matrix_near)
-print(f'the matrix fixed by near_PSD is PSD matrix now: {np.all(eigenvalues >= 0)}')
-print(f'the the runtime for near_PSD is: {runtime:.6f}')
+def cov_PCA_simulation(samples,percent=1.0):
+    pca = PCA()
+    pca.fit(samples)
+    eigenvector = pca.components_.T
+    eigenvalues = pca.explained_variance_
+    if percent == 1.0:
+        eigenvalue = np.diag(eigenvalues)
+    else:
+        cumulative_variance = np.cumsum(pca.explained_variance_ratio_)
+        n = find_n_component(cumulative_variance, percent)
+        eigenvector = eigenvector[:, :n]
+        eigenvalue = np.diag(eigenvalues[:n])
 
-
-start_time = time.time()
-matrix_hig = higham_PSD(sigma)
-end_time = time.time()
-runtime = end_time - start_time
-eigenvalues = np.linalg.eigvals(matrix_hig)
-print(f'the matrix fixed by higham_PSD is PSD matrix now: {np.all(eigenvalues >= 0)}')
-print(f'the the runtime for higham_PSD is: {runtime:.6f}')
-
-
-distance = np.linalg.norm(matrix_hig-sigma,ord='fro')
-distance1 = np.linalg.norm(matrix_near-sigma,ord='fro')
-print(f'Fro norm for higham_psd is {distance:.6f},while Fro norm for near_psd is {distance1:.6f}')
-
-
-
-
+    cov = eigenvector @ eigenvalue @ eigenvector.T
+    return cov
