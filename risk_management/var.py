@@ -2,6 +2,7 @@ from scipy.stats import norm
 from scipy.stats import t as tdist
 from scipy.optimize import minimize
 import numpy as np
+import pandas as pd
 
 def ES(distribution, alpha=0.05):
     dist_name = distribution.dist.name
@@ -63,3 +64,17 @@ def historic_var(stock_list, value = 1):
     var_return = np.percentile(sort_list, 5)
     VaR = value * abs(var_return)
     return VaR
+
+def aggRisk(values, group_cols):
+    alpha = 0.05
+    results = []
+    groups = values.groupby(group_cols)
+    for gname, gdf in groups:
+        portfolio_pnl = gdf['pnl'].values
+        Var95 = VaR(portfolio_pnl, alpha=alpha)
+        ES95 = ESS(portfolio_pnl, alpha=alpha)
+        if isinstance(gname, tuple):
+            gname = gname[0]
+        results.append((gname, Var95, ES95))
+    out = pd.DataFrame(results, columns=group_cols+['VaR95','ES95'])
+    return out
