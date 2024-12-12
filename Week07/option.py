@@ -1,9 +1,9 @@
 import numpy as np
 from scipy.stats import norm
-from scipy.optimize import root_scalar
+from scipy.optimize import root_scalar, minimize
 
 
-def gbsm(call: bool, S, K, T, r, b, sigma, Greek=False):
+def gbsm(call: bool, S, K, T, r, b, sigma, Greek=True):
     d1 = (np.log(S / K) + (b + (sigma ** 2) / 2) * T) / (sigma * np.sqrt(T))
     d2 = d1 - sigma * np.sqrt(T)
 
@@ -73,7 +73,7 @@ def bt_american(call, S, K, T, r, divAmts, divDays, sigma, N):
     for i in reversed(range(N)):
         for j in range(i + 1):
             exercise = (stock[j, i] - K if call else (K - stock[j, i]))
-            hold = discount * (q * opt[j, i + 1] + (1 - q) * opt[j + 1, i + 1])
+            hold = discount * (q * opt[j, i + 1] + (1 - q) * opt[j + 1, i + 1]) #value
             opt[j, i] = max(exercise, hold)
 
     return opt[0, 0]
@@ -88,9 +88,16 @@ def finite_diff_gradient(f, x, h=1e-6):
         grad[i] = (f(xph) - f(xmh)) / (2 * h)
     return grad
 
-def find_zero(call_type, current_price, strike, ttm, rf,b,market_price):
+def find_zero(call_type, current_price, strike, ttm, rf, cost_of_carry,market_price):
     def objective(iv):
-        root = gbsm(call_type, current_price,strike, ttm, rf, b, iv) - market_price
+        root = (gbsm(call_type, current_price,strike, ttm, rf, cost_of_carry, iv) - market_price)**2
         return root
-    result = root_scalar(objective, bracket=[-3, 3], method='brentq')
-    return result.root
+    result = minimize(objective, x0=0.2, bounds=[(0.01, 3.0)])
+    return result.x[0] if result.success else np.nan
+
+def find_zero_bt(call_type, S, K, T, rf, div, daysDiv, N, market_price):
+    def objective(iv):
+        price_model = (bt_american(call_type, S, K, T, rf, div, daysDiv, iv, N) - market_price)**2
+        return price_model
+    result = minimize(objective, x0=0.2, bounds=[(0.01, 3.0)])
+    return result.x[0] if result.success else np.nan

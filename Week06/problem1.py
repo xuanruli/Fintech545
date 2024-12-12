@@ -1,16 +1,7 @@
 import numpy as np
 from scipy.stats import norm
 from datetime import datetime
-
-def gbsm(call_type, current_price, strike, ttm, rf, cost_of_carry, iv):
-    b = rf - cost_of_carry
-    d1 = (np.log(current_price/strike)+(b+iv**2/2)*ttm)/(iv/np.sqrt(ttm))
-    d2 = d1 - iv/np.sqrt(ttm)
-    if call_type:
-        value = current_price*norm.cdf(d1) - strike*norm.cdf(d2)*np.exp(-rf*ttm)
-    else:
-        value = strike*np.exp(-rf*ttm)*norm.cdf(-d2) - current_price*norm.cdf(-d1)
-    return value
+from risk_management.option import gbsm
 
 import matplotlib.pyplot as plt
 days_to_maturity = (datetime(2023, 3, 17) - datetime(2023, 3, 3)).days/365

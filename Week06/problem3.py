@@ -5,7 +5,6 @@ import numpy as np
 from risk_management.option import find_zero,gbsm
 from statsmodels.tsa.arima.model import ARIMA
 from risk_management.var import aggRisk
-from types import SimpleNamespace
 
 currentS = 170.15
 current_dt = date(2023, 10, 30)
@@ -36,7 +35,7 @@ for i, row in portfolio.iterrows():
         strike = row['Strike']
         ttm = (row['ExpirationDate'] - current_dt).days / 365.0
         market_price = row['CurrentPrice']
-        iv = find_zero(call_type, currentS, strike, ttm, rf, dy, market_price)
+        iv = find_zero(call_type, currentS, strike, ttm, rf, rf-dy, market_price)
         implied_vols.append(iv)
     else:
         implied_vols.append(np.nan)
@@ -46,35 +45,38 @@ portfolio['ImpVol'] = implied_vols
 model = ARIMA(returns, order=(1,0,0))
 ar1_result = model.fit()
 ar1_params = ar1_result.params
+c = ar1_params[0]
+a1 = ar1_params[1]
+sigma2 = ar1_params[2]
+m = c / (1 - a1)
+s = np.sqrt(sigma2)
 
-def ar1_simulation(y, coef, innovations, ahead=1):
-    m = coef[0]
-    a1 = coef[1]
-    sigma2 = coef[2]
-    s = np.sqrt(sigma2)
 
+def ar1_simulation(y, m, a1, s, innovations, ahead=1):
     l = len(y)
     n = len(innovations)//ahead
+    out = np.zeros((ahead, n))
 
-    out = np.zeros((ahead,n))
-
+    # In Julia code, they do y_last = y[-1] - m
     y_last = y[-1] - m
     idx = 0
     for i in range(n):
         yl = y_last
         for j in range(ahead):
             eps = innovations[idx]
-            next_val = a1*yl + s*eps
+            next_val = a1 * yl + s * eps
             yl = next_val
-            out[j,i] = next_val
+            out[j, i] = next_val
             idx += 1
     out = out + m
     return out
 
+
 nSim = 10000
 fwdT = 10
+np.random.seed(1234)
 innovations = np.random.randn(fwdT*nSim)
-arSim = ar1_simulation(returns, ar1_params, innovations, ahead=fwdT)
+arSim = ar1_simulation(returns, m, a1, s, innovations, ahead=fwdT)
 
 simReturns = np.sum(arSim, axis=0)
 simPrices = currentS * np.exp(simReturns)
@@ -106,7 +108,7 @@ for i, row in values.iterrows():
                                     simprice,
                                     row['Strike'],
                                     row['fwd_ttm'],
-                                    rf, dy, row['ImpVol'])
+                                    rf, rf-dy, row['ImpVol'])
         simulatedValue.append(val)
     elif row['Type'] == 'Stock':
         val = row['Holding'] * simprice
